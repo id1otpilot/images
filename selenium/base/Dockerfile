@@ -1,18 +1,19 @@
 ARG UBUNTU_VERSION=22.04
 
-FROM golang:1.18 as go
+FROM golang:1.19 as go
 
-COPY xseld /xseld
+COPY clipboard /clipboard
 
 COPY fileserver /fileserver
 
 RUN \
     if [ `uname -m` = "aarch64" ]; then ARCH="arm64"; else ARCH="amd64"; fi && \
     apt-get update && \
-    apt-get install -y upx-ucl libx11-dev && \
-    cd /xseld && \
+    apt-get install -y upx-ucl libx11-dev xvfb && \
+    cd /clipboard && \
+    ./run-tests.sh && \
     GOOS=linux GOARCH=$ARCH go build -ldflags="-s -w" && \
-    upx /xseld/xseld && \
+    upx clipboard && \
     cd /fileserver && \
     go test -race && \
     GOOS=linux GOARCH=$ARCH go build -ldflags="-s -w" && \
@@ -55,13 +56,14 @@ RUN \
     xfonts-encodings \
     xfonts-utils \
     xvfb \
+    libx11-dev \
+    x11-utils \
     pulseaudio \
-    fluxbox \
+    openbox \
     x11vnc \
     feh \
-    wmctrl \
     libnss-wrapper \
-    xsel && \
+    && \
     if [ `uname -m` = "amd64" ]; then apt install -y flashplugin-installer; fi && \
     mkdir -p /var/lib/locales/supported.d/ && grep UTF-8 /usr/share/i18n/SUPPORTED > /var/lib/locales/supported.d/all && \
     locale-gen && update-locale && \
@@ -69,16 +71,14 @@ RUN \
     adduser --system --home /home/selenium --uid 4096 \
     --ingroup root --disabled-password --shell /bin/bash selenium && \
     mkdir -p /home/selenium/Downloads && \
-    mkdir -p /home/selenium/.fluxbox && \
     chgrp -R 0 /home/selenium && \
     chmod -R g=u /home/selenium && \
     ln -sf /bin/true /usr/bin/xdg-open && \
     apt-get clean && \
     rm -Rf /tmp/* && rm -Rf /var/lib/apt/lists/*
 
-COPY fluxbox /usr/share/fluxbox/styles/
-COPY --chown=selenium:root fluxbox /home/selenium/.fluxbox/
-COPY aerokube.png /usr/share/images/fluxbox/
-
 COPY --from=go /fileserver/fileserver /usr/bin/
-COPY --from=go /xseld/xseld /usr/bin/
+COPY --from=go /clipboard/clipboard /usr/bin/
+
+COPY openbox/menu.xml /etc/xdg/openbox/menu.xml
+COPY openbox/rc.xml /etc/xdg/openbox/rc.xml

@@ -1,6 +1,19 @@
 #!/bin/bash
-SCREEN_RESOLUTION=${SCREEN_RESOLUTION:-"1920x1080x24"}
-DISPLAY_NUM=99
+SCREEN_RESOLUTION=${SCREEN_RESOLUTION:-1920x1080x24}
+
+HORIZONTAL=$(echo ${SCREEN_RESOLUTION} | awk -Fx '{print $1}')
+VERTICAL=$(echo ${SCREEN_RESOLUTION} | awk -Fx '{print $2}')
+DEPTH=$(echo ${SCREEN_RESOLUTION} | awk -Fx '{print $3}')
+
+case ${DEPTH} in
+  8 | 16 | 24)
+    ;;
+  *)
+    DEPTH=24
+    ;;
+esac
+
+DISPLAY_NUM=0
 export DISPLAY=":$DISPLAY_NUM"
 
 cp /home/selenium/browsers.json /tmp
@@ -16,14 +29,17 @@ clean() {
   if [ -n "$FILESERVER_PID" ]; then
     kill -TERM "$FILESERVER_PID"
   fi
-  if [ -n "$XSELD_PID" ]; then
-    kill -TERM "$XSELD_PID"
+  if [ -n "$CLIPBOARD_PID" ]; then
+    kill -TERM "$CLIPBOARD_PID"
   fi
   if [ -n "$PULSE_PID" ]; then
     kill -TERM "$PULSE_PID"
   fi
   if [ -n "$XVFB_PID" ]; then
     kill -TERM "$XVFB_PID"
+  fi
+  if [ -n "$OPENBOX_PID" ]; then
+    kill -TERM "$OPENBOX_PID"
   fi
   if [ -n "$SELENOID_PID" ]; then
     kill -TERM "$SELENOID_PID"
@@ -38,8 +54,8 @@ trap clean SIGINT SIGTERM
 /usr/bin/fileserver &
 FILESERVER_PID=$!
 
-DISPLAY="$DISPLAY" /usr/bin/xseld &
-XSELD_PID=$!
+DISPLAY=${DISPLAY} /usr/bin/clipboard &
+CLIPBOARD_PID=$!
 
 mkdir -p ~/pulse/.config/pulse
 echo -n 'gIvST5iz2S0J1+JlXC1lD3HWvg61vDTV1xbmiGxZnjB6E3psXsjWUVQS4SRrch6rygQgtpw7qmghDFTaekt8qWiCjGvB0LNzQbvhfs1SFYDMakmIXuoqYoWFqTJ+GOXYByxpgCMylMKwpOoANEDePUCj36nwGaJNTNSjL8WBv+Bf3rJXqWnJ/43a0hUhmBBt28Dhiz6Yqowa83Y4iDRNJbxih6rB1vRNDKqRr/J9XJV+dOlM0dI+K6Vf5Ag+2LGZ3rc5sPVqgHgKK0mcNcsn+yCmO+XLQHD1K+QgL8RITs7nNeF1ikYPVgEYnc0CGzHTMvFR7JLgwL2gTXulCdwPbg=='| base64 -d>~/pulse/.config/pulse/cookie
@@ -47,21 +63,18 @@ HOME=$HOME/pulse pulseaudio --start --exit-idle-time=-1
 HOME=$HOME/pulse pactl load-module module-native-protocol-tcp
 PULSE_PID=$(ps --no-headers -C pulseaudio -o pid | sed -r 's/( )+//g')
 
-/usr/bin/xvfb-run -l -n "$DISPLAY_NUM" -s "-ac -screen 0 $SCREEN_RESOLUTION -noreset -listen tcp" /usr/bin/fluxbox -display "$DISPLAY" -log /dev/null 2>/dev/null &
+Xvfb ${DISPLAY} -ac -screen 0 ${HORIZONTAL}x${VERTICAL}x${DEPTH} -noreset -listen tcp -nolisten unix &
 XVFB_PID=$!
-
-retcode=1
-until [ $retcode -eq 0 ]; do
-  DISPLAY="$DISPLAY" wmctrl -m >/dev/null 2>&1
-  retcode=$?
-  if [ $retcode -ne 0 ]; then
-    echo Waiting X server...
-    sleep 0.1
-  fi
+while ! xdpyinfo -display ${DISPLAY} 1> /dev/null 2> /dev/null; do
+  echo 'Waiting X server...'
+  sleep 1s
 done
 
+/bin/bash -c "until [ -f /tmp/.X0-lock ]; do sleep 1s; done; exec openbox" &
+OPENBOX_PID=$!
+
 if [ "$ENABLE_VNC" == "true" ]; then
-    x11vnc -display "$DISPLAY" -passwd selenoid -shared -forever -loop500 -rfbport 5900 -rfbportv6 5900 -logfile /dev/null &
+    x11vnc -xkb -xrandr -noxrecord -forever -passwd selenoid -display WAIT${DISPLAY} -shared -rfbport 5900 1> /dev/null 2> /dev/null &
     X11VNC_PID=$!
 fi
 

@@ -1,0 +1,10 @@
+docker build --tag browsers/base:7.4.1 .
+
+go generate github.com/aerokube/images && \
+go build
+
+./images chrome -b 112.0.5615.165-1 -d 112.0.5615.49 -t selenoid/chrome:112.0 --test
+./images firefox -b 112.0.2+build1-0ubuntu0.22.04.1~mt1 -d 0.33.0 -t selenoid/firefox:112.0 --test
+./images edge -b 112.0.1722.64-1 -d 112.0.1722.39 -t browsers/edge:112.0 --test
+./images opera -b 98.0.4759.15 -d 112.0.5615.87 -t selenoid/opera:98.0 --test
+./images yandex -b 23.3.3.706-1 -d 23.3.1.755 -t selenoid/yandex:112.0 --test
